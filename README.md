@@ -1,3 +1,8 @@
+# This Fork
+In this fork, I'll try to implement minimal ruler functionality for freehand sketching, such as a horizontal/vertical ruler, arbitrary ruler, and perhaps a compass. \
+
+------
+
 # NoteKit
 This program is a structured notetaking application based on GTK+ 3. Write your notes in instantly-formatted Markdown, organise them in a tree of folders that can be instantly navigated from within the program, and add hand-drawn notes by mouse, touchscreen or digitiser.
 
