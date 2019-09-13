@@ -1,5 +1,5 @@
 # This Fork
-In this fork, I'll try to implement minimal ruler functionality for freehand sketching, such as a horizontal/vertical ruler, arbitrary ruler, and perhaps a compass. \
+In this fork, I'll try to implement minimal ruler functionality for freehand sketching, such as a horizontal/vertical ruler, arbitrary ruler, and perhaps a compass.
 
 ------
 
