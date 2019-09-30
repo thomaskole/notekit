@@ -70,15 +70,24 @@ public:
 	void on_highlight_updated(Gtk::TextBuffer::iterator &start, Gtk::TextBuffer::iterator &end);
 	
 	int modifier_keys; // modifier keys active during most recent keypress
+    int modifier_keys_down; // modifier keys active for as long as they are held
 	virtual bool on_key_press_event(GdkEventKey *k);
+    virtual bool on_key_release_event(GdkEventKey *k);
 	void on_insert(const Gtk::TextBuffer::iterator &,const Glib::ustring& str,int len);
 	
 	guint8* on_serialize(const Glib::RefPtr<Gtk::TextBuffer>& content_buffer, const Gtk::TextBuffer::iterator& start, const Gtk::TextBuffer::iterator& end, gsize& length, bool render_images);
 	bool on_deserialize(const Glib::RefPtr<Gtk::TextBuffer>& content_buffer, Gtk::TextBuffer::iterator& iter, const guint8* data, gsize length, bool create_tags); 
 	
+    //Ruler
+    int ruler_origin_x, ruler_origin_y, ruler_direction_x, ruler_direction_y;
+    bool ruler_cartesian_held, ruler_polar_held;
+    enum RULER_MODE {RULER_DISABLED, RULER_CARTESIAN, RULER_HORIZONTAL, RULER_VERTICAL, RULER_POLAR, RULER_RADIAL, RULER_COMPASS};
+    RULER_MODE ruler_mode;
 	
 	float ReadPressure(GdkDevice *d);
 	void Widget2Doc(double in_x, double in_y, double &out_x, double &out_y);
+    
+    void Normalize(double x, double y, double& returnX, double& returnY);
 };
 
 #endif

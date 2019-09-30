@@ -67,7 +67,11 @@ void CNotebook::Init(std::string data_path)
 	tag_extra_space->property_pixels_below_lines().set_value(8);
 	tag_extra_space->property_pixels_above_lines().set_value(8);
 	
-	set_wrap_mode(Gtk::WRAP_WORD_CHAR);}
+	set_wrap_mode(Gtk::WRAP_WORD_CHAR);
+    
+    ruler_mode = RULER_DISABLED;
+    ruler_cartesian_held = false;
+    ruler_polar_held = false;}
 
 void CNotebook::SetCursor(Glib::RefPtr<Gdk::Cursor> c)
 {
@@ -131,8 +135,44 @@ void CStroke::Render(const Cairo::RefPtr<Cairo::Context> &ctx, float basex, floa
 
 bool CNotebook::on_key_press_event(GdkEventKey *k)
 {
+    if ((k->keyval == GDK_KEY_Shift_L || k->keyval == GDK_KEY_Shift_R) && ruler_mode == RULER_DISABLED)
+    {
+        ruler_cartesian_held = true;
+        ruler_mode = RULER_CARTESIAN;
+    }
+    if ((k->keyval == GDK_KEY_Control_L || k->keyval == GDK_KEY_Control_L) && ruler_mode == RULER_DISABLED)
+    {
+        ruler_polar_held = true;
+        ruler_mode = RULER_POLAR;
+        Gsv::View::get_pointer(ruler_origin_x, ruler_origin_y);
+    }
+    
+    
+        
 	modifier_keys = k->state & (GDK_MODIFIER_MASK);
 	return Gsv::View::on_key_press_event(k);
+}
+
+bool CNotebook::on_key_release_event(GdkEventKey *k)
+{
+    if ((k->keyval == GDK_KEY_Shift_L || k->keyval == GDK_KEY_Shift_R))
+    {
+        ruler_cartesian_held = false;
+        if (ruler_mode == RULER_CARTESIAN) //user requested ruler before, but did not start drawing yet.
+            ruler_mode = RULER_DISABLED;
+    }
+    if ((k->keyval == GDK_KEY_Control_L || k->keyval == GDK_KEY_Control_L))
+    {   
+        ruler_polar_held = false;
+        if (ruler_mode == RULER_POLAR) //user requested ruler before, but did not start drawing yet.
+        {
+            ruler_mode = RULER_DISABLED;
+            ruler_direction_x = -1;
+            ruler_direction_y = -1;
+        }
+    }
+        
+	return Gsv::View::on_key_release_event(k);
 }
 
 void CNotebook::on_insert(const Gtk::TextBuffer::iterator &iter,const Glib::ustring& str,int len)
@@ -308,6 +348,15 @@ bool CNotebook::on_button_release(GdkEventButton *e)
 			active.Simplify();
 			CommitStroke();
 			sbuffer->end_not_undoable_action();
+            if(!ruler_cartesian_held && !ruler_polar_held)
+                ruler_mode = RULER_DISABLED;
+            if (ruler_cartesian_held)
+                ruler_mode = RULER_CARTESIAN;
+            else if (ruler_polar_held)
+            {
+                ruler_mode = RULER_POLAR;
+                ruler_direction_x = ruler_direction_y = -1;
+            }
 		}
 		
 		active_state=NB_STATE_NOTHING;
@@ -347,7 +396,86 @@ bool CNotebook::on_motion_notify(GdkEventMotion *e)
 			gdk_window_set_event_compression(e->window,false);
 		}
 		//p=attention_ewma;
-		
+        double xOrigin, yOrigin;
+        Widget2Doc((double)ruler_origin_x, (double)ruler_origin_y, xOrigin, yOrigin);
+        
+        switch(ruler_mode)
+        {
+            case RULER_DISABLED: break;     //Do nothing...
+            case RULER_CARTESIAN:           //Ruler can be horizontal or vertical, not sure which yet.
+                if ((xprev-x) == 0 && (yprev-y) == 0)
+                    break;//Don choose ruler yet.
+                if(abs(xprev-x) > abs(yprev-y))
+                    ruler_mode = RULER_HORIZONTAL;
+                else
+                    ruler_mode = RULER_VERTICAL;
+                break;
+            case RULER_HORIZONTAL: y = yprev; break;
+            case RULER_VERTICAL: x = xprev; break;
+            case RULER_POLAR:
+            {
+                if (ruler_direction_x == -1 && ruler_direction_y == -1)
+                {
+                    ruler_direction_x = x;
+                    ruler_direction_y = y;
+                }
+                else
+                {
+                    double v1x = ruler_direction_x - x;
+                    double v1y = ruler_direction_y - y;
+                    
+                    Normalize(v1x, v1y, v1x, v1y);
+                    
+                    double v2x = ruler_direction_x - ruler_origin_x;
+                    double v2y = ruler_direction_y - ruler_origin_y;
+                    
+                    Normalize(v2x, v2y, v2x, v2y);
+                    double dot = v1x * v2x + v1y * v2y;
+                    
+                    dot = abs(dot);
+                    if (dot < 0.5f)
+                        {ruler_mode = RULER_COMPASS;}
+                    else
+                        {ruler_mode = RULER_RADIAL;}
+                    
+                }                        
+            }
+                break;
+            case RULER_COMPASS:
+            {
+                    double deltaX = ruler_direction_x - ruler_origin_x;
+                    double deltaY = ruler_direction_y - ruler_origin_y;
+                    
+                    double desiredDistance = deltaX * deltaX + deltaY * deltaY;
+                    desiredDistance = sqrt(desiredDistance);
+                    
+                    deltaX = x - ruler_origin_x;
+                    deltaY = y - ruler_origin_y;
+                    
+                    double distance = deltaX * deltaX + deltaY * deltaY;
+                    distance = sqrt(distance);
+                    
+                    x = ruler_origin_x + ((deltaX / distance) * desiredDistance);
+                    y = ruler_origin_y + ((deltaY / distance) * desiredDistance);
+            }
+            break;
+            
+            case RULER_RADIAL:
+            {
+                double m = (double)(ruler_direction_y - ruler_origin_y) / (ruler_direction_x - ruler_origin_x);
+                double b = (double)ruler_origin_y - (m * ruler_origin_x);
+
+                double rx = (m * y + x - m * b) / (m * m + 1);
+                double ry = (m * m * y + m * x + b) / (m * m + 1);
+                x = rx;
+                y = ry;
+            }
+            
+            break;
+            
+            break;
+        }          
+
 		active.Append(x,y,p);
 		
 		int bx, by;
@@ -362,6 +490,16 @@ bool CNotebook::on_motion_notify(GdkEventMotion *e)
 		EraseAtPosition(x,y);
 	}
 	return false;
+}
+
+void CNotebook::Normalize(double x, double y, double& returnX, double& returnY)
+{
+    
+    double distance = x * x + y * y;
+    distance = sqrt(distance);
+    
+    returnX = (x / distance);
+    returnY = (y / distance);
 }
 
 float CNotebook::ReadPressure(GdkDevice *d) 
